@@ -79,28 +79,39 @@ async function main() {
   const adminEmail = "admin@quanlybaixe.vn";
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },
-    update: {},
+    update: {
+      name: "Quản trị hệ thống",
+      passwordHash: await argon2.hash("Admin@123456"),
+      isSuperAdmin: true,
+      isActive: true,
+    },
     create: {
       email: adminEmail,
       name: "Quản trị hệ thống",
       passwordHash: await argon2.hash("Admin@123456"),
       isSuperAdmin: true,
+      isActive: true,
     },
   });
 
   const demoEmail = "demo@baixe.vn";
   const trial = await prisma.plan.findUniqueOrThrow({ where: { code: PlanCode.DUNG_THU } });
-  let demoUser = await prisma.user.findUnique({ where: { email: demoEmail } });
-  if (!demoUser) {
-    demoUser = await prisma.user.create({
-      data: {
-        email: demoEmail,
-        name: "Chị Minh Tâm",
-        phone: "0909000111",
-        passwordHash: await argon2.hash("Demo@123456"),
-      },
-    });
-  }
+  const demoUser = await prisma.user.upsert({
+    where: { email: demoEmail },
+    update: {
+      name: "Chị Minh Tâm",
+      phone: "0909000111",
+      passwordHash: await argon2.hash("Demo@123456"),
+      isActive: true,
+    },
+    create: {
+      email: demoEmail,
+      name: "Chị Minh Tâm",
+      phone: "0909000111",
+      passwordHash: await argon2.hash("Demo@123456"),
+      isActive: true,
+    },
+  });
 
   let tenant = await prisma.tenant.findUnique({ where: { slug: "bai-xe-minh-tam" } });
   if (!tenant) {

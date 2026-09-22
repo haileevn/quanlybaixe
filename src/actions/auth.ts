@@ -5,13 +5,20 @@ import { headers } from "next/headers";
 import { signIn, signOut, auth } from "@/lib/auth";
 import { AppError, fail, ok, type ActionResult } from "@/lib/errors";
 import {
+  changePasswordSchema,
   loginSchema,
   otpLoginSchema,
   otpRequestSchema,
   registerSchema,
   resetPasswordSchema,
+  updateProfileSchema,
 } from "@/lib/validators/auth";
-import { requestEmailOtp, resetPasswordWithOtp } from "@/services/auth.service";
+import {
+  changeUserPassword,
+  requestEmailOtp,
+  resetPasswordWithOtp,
+  updateUserProfile,
+} from "@/services/auth.service";
 import { registerOwner } from "@/services/tenant.service";
 import { assertRateLimit } from "@/lib/rate-limit";
 
@@ -116,6 +123,34 @@ export async function resetPasswordAction(input: unknown): Promise<ActionResult>
   try {
     const data = resetPasswordSchema.parse(input);
     await resetPasswordWithOtp(data);
+    return ok();
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function changePasswordAction(input: unknown): Promise<ActionResult> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      throw new AppError("Bạn chưa đăng nhập.", "UNAUTHORIZED");
+    }
+    const data = changePasswordSchema.parse(input);
+    await changeUserPassword(session.user.id, data.currentPassword, data.newPassword);
+    return ok();
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function updateUserProfileAction(input: unknown): Promise<ActionResult> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      throw new AppError("Bạn chưa đăng nhập.", "UNAUTHORIZED");
+    }
+    const data = updateProfileSchema.parse(input);
+    await updateUserProfile(session.user.id, data);
     return ok();
   } catch (error) {
     return fail(error);

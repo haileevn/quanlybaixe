@@ -37,6 +37,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link className="rounded-full bg-white/15 px-3 py-2 transition hover:bg-white/25" href="/admin/goi">
             Gói
           </Link>
+          <Link className="rounded-full bg-white/15 px-3 py-2 transition hover:bg-white/25" href="/admin/tai-khoan">
+            Tài khoản
+          </Link>
         </nav>
       </header>
       <main className="px-4 py-4">{children}</main>

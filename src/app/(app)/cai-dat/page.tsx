@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { SettingsPanel } from "@/components/layout/SettingsPanel";
 import { SettingsGroup } from "@/components/layout/SettingsGroup";
+import { UserProfileSettings } from "@/components/settings/UserProfileSettings";
 import { ReminderSettings } from "@/components/finance/ReminderSettings";
 import { ModuleSettings } from "@/components/modules/ModuleSettings";
 import { BankSettings } from "@/components/layout/BankSettings";
@@ -27,6 +28,9 @@ export default async function SettingsPage() {
   return (
     <AppShell title="Cài đặt">
       <div className="space-y-3">
+        <SettingsGroup title="Tài khoản cá nhân & Mật khẩu" hint={user.email} defaultOpen={false}>
+          <UserProfileSettings user={user} />
+        </SettingsGroup>
         {isOwner ? (
           <>
             <SettingsGroup

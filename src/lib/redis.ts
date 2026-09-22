@@ -8,11 +8,15 @@ function createRedis() {
     return null;
   }
   try {
-    return new Redis(url, {
+    const client = new Redis(url, {
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
       lazyConnect: true,
     });
+    client.on("error", () => {
+      // Ignore background connection errors and fallback to in-memory
+    });
+    return client;
   } catch {
     return null;
   }

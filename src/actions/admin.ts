@@ -86,3 +86,46 @@ export async function saveAddonAction(input: {
     return fail(error);
   }
 }
+
+export async function adminUpdateUserAction(input: unknown): Promise<ActionResult> {
+  try {
+    await requireSuperAdmin();
+    const { adminUpdateUserSchema } = await import("@/lib/validators/auth");
+    const data = adminUpdateUserSchema.parse(input);
+    const { adminUpdateUser } = await import("@/services/admin.service");
+    await adminUpdateUser(data);
+    return ok();
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function adminResetUserPasswordAction(input: unknown): Promise<ActionResult> {
+  try {
+    await requireSuperAdmin();
+    const { adminResetPasswordSchema } = await import("@/lib/validators/auth");
+    const data = adminResetPasswordSchema.parse(input);
+    const { adminResetUserPassword } = await import("@/services/admin.service");
+    await adminResetUserPassword(data.userId, data.newPassword);
+    return ok();
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function adminUpdateSelfAction(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  currentPassword?: string;
+  newPassword?: string;
+}): Promise<ActionResult> {
+  try {
+    const admin = await requireSuperAdmin();
+    const { adminUpdateSelf } = await import("@/services/admin.service");
+    await adminUpdateSelf(admin.id, input);
+    return ok();
+  } catch (error) {
+    return fail(error);
+  }
+}

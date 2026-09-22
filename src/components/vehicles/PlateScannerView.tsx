@@ -44,6 +44,7 @@ export function PlateScannerView() {
   const [progressMsg, setProgressMsg] = useState("");
   const [recognizedPlate, setRecognizedPlate] = useState("");
   const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
+  const [serverImageUrl, setServerImageUrl] = useState<string | null>(null);
   const [lookupResult, setLookupResult] = useState<VehicleLookupResult | null>(null);
   const [quota, setQuota] = useState<PlateScanQuotaInfo | null>(null);
   const [showProcessedPreview, setShowProcessedPreview] = useState(false);
@@ -210,8 +211,15 @@ export function PlateScannerView() {
 
             setRecognizedPlate(result.plate);
 
+            try {
+              const dataUrl = frameCanvas.toDataURL("image/jpeg", 0.9);
+              setCapturedImageUrl(dataUrl);
+            } catch (err) {
+              console.warn("Canvas toDataURL error:", err);
+            }
+
             frameCanvas.toBlob((blob) => {
-              if (blob) uploadCapturedFile(blob);
+              if (blob) void uploadCapturedFile(blob);
             }, "image/jpeg", 0.9);
 
             stopCamera();
@@ -253,6 +261,13 @@ export function PlateScannerView() {
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+    try {
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+      setCapturedImageUrl(dataUrl);
+    } catch (err) {
+      console.warn("Canvas toDataURL error:", err);
+    }
+
     canvas.toBlob(async (blob) => {
       if (blob) {
         await processImageSource(blob, canvas);
@@ -264,6 +279,12 @@ export function PlateScannerView() {
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      setCapturedImageUrl(objectUrl);
+    } catch {
+      // ignore
+    }
     await processImageSource(file);
   }
 
@@ -287,9 +308,16 @@ export function PlateScannerView() {
         canvas.height = img.height;
         const ctx = canvas.getContext("2d");
         ctx?.drawImage(img, 0, 0);
+
+        try {
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+          setCapturedImageUrl((prev) => prev || dataUrl);
+        } catch {
+          // ignore
+        }
       }
 
-      uploadCapturedFile(source);
+      void uploadCapturedFile(source);
 
       // Chạy Local ANPR Pipeline với hỗ trợ tự động gọi AI nếu Local < 0.88
       const result = await scanPlate(canvas, {
@@ -332,7 +360,10 @@ export function PlateScannerView() {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       if (res.ok) {
         const data = (await res.json()) as { url?: string };
-        if (data.url) setCapturedImageUrl(data.url);
+        if (data.url) {
+          setServerImageUrl(data.url);
+          setCapturedImageUrl((prev) => prev || data.url!);
+        }
       }
     } catch {
       // Bỏ qua lỗi upload nền
@@ -372,6 +403,7 @@ export function PlateScannerView() {
     setLookupResult(null);
     setRecognizedPlate("");
     setCapturedImageUrl(null);
+    setServerImageUrl(null);
     setLiveCandidate(null);
     setLockProgress(0);
     setQualityWarning(null);
@@ -389,6 +421,7 @@ export function PlateScannerView() {
         <PlateLookupResult
           result={lookupResult}
           capturedImageUrl={capturedImageUrl}
+          serverImageUrl={serverImageUrl}
           onReset={handleReset}
         />
       ) : (

@@ -23,12 +23,16 @@ import { CollectButton } from "@/components/vehicles/CollectButton";
 export function PlateLookupResult({
   result,
   capturedImageUrl,
+  serverImageUrl,
   onReset,
 }: {
   result: VehicleLookupResult;
   capturedImageUrl?: string | null;
+  serverImageUrl?: string | null;
   onReset: () => void;
 }) {
+  const previewImg = capturedImageUrl || serverImageUrl || null;
+
   // TRƯỜNG HỢP 1: XE ĐÃ ĐĂNG KÝ TRONG BÃI
   if (result.found) {
     const { vehicle } = result;
@@ -58,7 +62,7 @@ export function PlateLookupResult({
         </div>
 
         {/* Khối hình ảnh đối chiếu nhận diện xe */}
-        {(vehicle.imageUrl || capturedImageUrl) && (
+        {(vehicle.imageUrl || previewImg) && (
           <div className="rounded-2xl bg-white p-4 ring-1 ring-[#0F4C5C]/10 shadow-sm space-y-2">
             <p className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1.5">
               <Camera className="size-4 text-[#0F4C5C]" />
@@ -73,17 +77,23 @@ export function PlateLookupResult({
                     src={vehicle.imageUrl}
                     alt="Ảnh xe hồ sơ"
                     className="h-32 w-full rounded-xl object-cover ring-1 ring-neutral-200"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = "none";
+                    }}
                   />
                 </div>
               ) : null}
-              {capturedImageUrl ? (
+              {previewImg ? (
                 <div>
                   <p className="mb-1 text-xs font-medium text-neutral-600">Ảnh vừa quét:</p>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={capturedImageUrl}
+                    src={previewImg}
                     alt="Ảnh vừa quét"
                     className="h-32 w-full rounded-xl object-cover ring-1 ring-neutral-200"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = "none";
+                    }}
                   />
                 </div>
               ) : null}
@@ -242,8 +252,9 @@ export function PlateLookupResult({
 
   // TRƯỜNG HỢP 2: XE CHƯA ĐĂNG KÝ TRONG BÃI
   const targetPlate = result.plateNumber.trim().toUpperCase();
+  const validUploadUrl = serverImageUrl || (capturedImageUrl?.startsWith("/uploads") || capturedImageUrl?.startsWith("http") ? capturedImageUrl : "");
   const createUrl = `/xe-thang/them?plate=${encodeURIComponent(targetPlate)}${
-    capturedImageUrl ? `&imageUrl=${encodeURIComponent(capturedImageUrl)}` : ""
+    validUploadUrl ? `&imageUrl=${encodeURIComponent(validUploadUrl)}` : ""
   }`;
 
   return (
@@ -281,16 +292,19 @@ export function PlateLookupResult({
           </p>
         </div>
 
-        {capturedImageUrl && (
+        {previewImg && (
           <div className="rounded-2xl bg-white p-3 border border-red-100 text-left">
             <p className="text-xs font-semibold text-neutral-600 mb-2 flex items-center gap-1">
               <Camera className="size-3.5" /> Ảnh biển số vừa quét:
             </p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={capturedImageUrl}
+              src={previewImg}
               alt="Ảnh vừa quét"
-              className="h-32 w-full rounded-xl object-cover"
+              className="h-32 w-full rounded-xl object-cover ring-1 ring-neutral-200 shadow-xs"
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = "none";
+              }}
             />
           </div>
         )}

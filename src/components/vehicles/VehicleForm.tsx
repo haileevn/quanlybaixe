@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { Camera, RefreshCw } from "lucide-react";
 import { MoneyInput } from "@/components/money/MoneyInput";
 import { PlanLimitDialog } from "@/components/layout/PlanLimitDialog";
 import { ConfirmDelete } from "@/components/layout/ConfirmDelete";
@@ -54,6 +55,7 @@ export function VehicleForm({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [isUploading, setIsUploading] = useState(false);
   const [values, setValues] = useState<VehicleFormValues>({ ...empty, ...initial });
   const [limitOpen, setLimitOpen] = useState(false);
   const [limitMessage, setLimitMessage] = useState("");
@@ -63,15 +65,24 @@ export function VehicleForm({
   }
 
   async function upload(file: File) {
-    const body = new FormData();
-    body.set("file", file);
-    const res = await fetch("/api/upload", { method: "POST", body });
-    const json = (await res.json()) as { url?: string; message?: string };
-    if (!res.ok || !json.url) {
-      toast.error(json.message ?? "Không tải được ảnh.");
-      return;
+    setIsUploading(true);
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body });
+      const json = (await res.json()) as { url?: string; message?: string };
+      if (!res.ok || !json.url) {
+        toast.error(json.message ?? "Không tải được ảnh.");
+        return;
+      }
+      set("imageUrl", json.url);
+      toast.success("Đã tải ảnh lên thành công.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Lỗi khi tải ảnh lên.");
+    } finally {
+      setIsUploading(false);
     }
-    set("imageUrl", json.url);
   }
 
   function submit() {
@@ -153,17 +164,39 @@ export function VehicleForm({
         {values.imageUrl ? (
           <div className="relative overflow-hidden rounded-xl ring-1 ring-neutral-200">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={values.imageUrl} alt="Xe" className="h-48 w-full object-cover" />
+            <img
+              src={values.imageUrl}
+              alt="Xe"
+              className="h-48 w-full object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = "none";
+              }}
+            />
           </div>
         ) : null}
 
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#0F4C5C]/30 bg-[#0F4C5C]/5 py-3.5 text-sm font-bold text-[#0F4C5C] hover:bg-[#0F4C5C]/10 transition">
-          <span>{values.imageUrl ? "Chụp lại / Đổi ảnh khác" : "Chụp ảnh xe ngay (Camera)"}</span>
+        <label
+          className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#0F4C5C]/30 bg-[#0F4C5C]/5 py-3.5 text-sm font-bold text-[#0F4C5C] hover:bg-[#0F4C5C]/10 transition ${
+            isUploading ? "opacity-60 pointer-events-none" : ""
+          }`}
+        >
+          {isUploading ? (
+            <>
+              <RefreshCw className="size-4 animate-spin text-[#0F4C5C]" />
+              <span>Đang tải ảnh lên...</span>
+            </>
+          ) : (
+            <>
+              <Camera className="size-4" />
+              <span>{values.imageUrl ? "Chụp lại / Đổi ảnh khác" : "Chụp ảnh xe ngay (Camera)"}</span>
+            </>
+          )}
           <input
             type="file"
             accept="image/*"
             capture="environment"
             className="hidden"
+            disabled={isUploading}
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void upload(file);

@@ -9,7 +9,8 @@ RUN apt-get update && apt-get install -y openssl python3 make g++ gcc && rm -rf 
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
 
-RUN npm ci
+ENV NODE_ENV=development
+RUN npm ci --include=dev
 
 # ==========================================
 # STAGE 2: Build Next.js Standalone

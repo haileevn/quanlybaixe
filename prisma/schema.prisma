@@ -1,0 +1,828 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  MANAGER
+  STAFF
+  VIEWER
+}
+
+enum PlanCode {
+  DUNG_THU
+  CO_BAN
+  NANG_CAO
+  DOANH_NGHIEP
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum SaasPaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VehicleType {
+  XE_MAY
+  XE_MAY_DIEN
+  O_TO
+  XE_DAP_DIEN
+}
+
+enum ContractStatus {
+  DANG_GUI
+  TAM_NGUNG
+  DA_NGHI
+}
+
+enum BillingCycle {
+  THANG
+  QUY
+}
+
+enum RoomStatus {
+  TRONG
+  DANG_THUE
+  DANG_SUA
+}
+
+enum ChargerStatus {
+  RANH
+  DANG_SAC
+  HONG
+}
+
+enum ChargingBillingType {
+  KWH
+  GIO
+  GOI_THANG
+}
+
+enum InvoiceStatus {
+  CHUA_THANH_TOAN
+  DA_THANH_TOAN
+  HUY
+}
+
+enum InvoiceSource {
+  XE_THANG
+  PHONG_TRO
+  MAT_BANG
+  SAC_DIEN
+  DICH_VU
+  VANG_LAI
+}
+
+enum TransactionType {
+  THU
+  CHI
+}
+
+enum PaymentMethod {
+  TIEN_MAT
+  CHUYEN_KHOAN
+}
+
+enum ServiceCycle {
+  MOT_LAN
+  THANG
+}
+
+model Plan {
+  id              String         @id @default(cuid())
+  code            PlanCode       @unique
+  name            String
+  maxBranches     Int
+  maxVehicles     Int
+  maxStaff        Int
+  monthlyPrice    Decimal        @db.Decimal(14, 0)
+  trialDays       Int            @default(0)
+  maxDailyScans   Int            @default(-1)
+  maxMonthlyScans Int            @default(-1)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  subscriptions   Subscription[]
+}
+
+model PlanAddon {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  monthlyPrice Decimal  @db.Decimal(14, 0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Tenant {
+  id                   String         @id @default(cuid())
+  name                 String
+  slug                 String         @unique
+  onboardingCompleted  Boolean        @default(false)
+  demoDataEnabled      Boolean        @default(false)
+  approvalStatus       ApprovalStatus @default(PENDING)
+  approvedAt           DateTime?
+  approvedBy           String?
+  enabledModules       Json
+  reminderConfig       Json
+  bankBin              String?
+  bankName             String?
+  bankAccountNo        String?
+  bankAccountName      String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  deletedAt            DateTime?
+
+  userTenants     UserTenant[]
+  branches        Branch[]
+  subscriptions   Subscription[]
+  payments        Payment[]
+  collectIntents  CollectIntent[]
+  customers       Customer[]
+  vehicles        Vehicle[]
+  vehicleContracts VehicleContract[]
+  rooms           Room[]
+  roomContracts   RoomContract[]
+  utilityReadings UtilityReading[]
+  kiosks          Kiosk[]
+  kioskContracts  KioskContract[]
+  serviceTypes    ServiceType[]
+  serviceSubs     ServiceSubscription[]
+  chargers        Charger[]
+  chargingPlans   ChargingPlan[]
+  chargingSessions ChargingSession[]
+  invoices        Invoice[]
+  invoiceItems    InvoiceItem[]
+  transactions    Transaction[]
+  expenseCategories ExpenseCategory[]
+  cashbookClosings CashbookClosing[]
+  reminders       Reminder[]
+  notificationLogs NotificationLog[]
+  auditLogs       AuditLog[]
+  plateScanUsages PlateScanUsage[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  phone        String?
+  isSuperAdmin Boolean   @default(false)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  userTenants  UserTenant[]
+  transactions Transaction[]
+  auditLogs    AuditLog[]
+}
+
+model UserTenant {
+  id         String    @id @default(cuid())
+  tenantId   String
+  userId     String
+  role       Role
+  branchId   String?
+  disabledAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  user   User    @relation(fields: [userId], references: [id])
+  branch Branch? @relation(fields: [branchId], references: [id])
+
+  @@unique([userId, tenantId])
+  @@index([tenantId, deletedAt])
+}
+
+model Subscription {
+  id         String             @id @default(cuid())
+  tenantId   String
+  planId     String
+  status     SubscriptionStatus @default(ACTIVE)
+  startsAt   DateTime
+  endsAt     DateTime
+  paidAddons Json?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  deletedAt  DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  plan     Plan      @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@index([tenantId, status])
+}
+
+model Payment {
+  id               String             @id @default(cuid())
+  tenantId         String
+  subscriptionId   String
+  targetPlanId     String
+  amount           Decimal            @db.Decimal(14, 0)
+  months           Int                @default(1)
+  status           SaasPaymentStatus  @default(PENDING)
+  transferContent  String?
+  addons           Json?
+  proofImageUrl    String?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  note             String?            @db.Text
+  isDemo           Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  deletedAt        DateTime?
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([tenantId, status])
+}
+
+model CollectIntent {
+  id              String    @id @default(cuid())
+  tenantId        String
+  branchId        String
+  publicToken     String    @unique
+  source          String
+  vehicleId       String?
+  roomId          String?
+  kioskId         String?
+  subscriptionId  String?
+  customerId      String
+  months          Int       @default(1)
+  amount          Decimal   @db.Decimal(14, 0)
+  transferContent String
+  status          String    @default("PENDING")
+  proofImageUrl   String?
+  paidAt          DateTime?
+  invoiceId       String?
+  isDemo          Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([transferContent])
+}
+
+model Branch {
+  id              String    @id @default(cuid())
+  tenantId        String
+  name            String
+  address         String?
+  phone           String?
+  bankBin         String?
+  bankName        String?
+  bankAccountNo   String?
+  bankAccountName String?
+  isDemo          Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant           Tenant             @relation(fields: [tenantId], references: [id])
+  userTenants      UserTenant[]
+  customers        Customer[]
+  vehicles         Vehicle[]
+  vehicleContracts VehicleContract[]
+  rooms            Room[]
+  kiosks           Kiosk[]
+  chargers         Charger[]
+  invoices         Invoice[]
+  transactions     Transaction[]
+  cashbookClosings CashbookClosing[]
+  roomContracts    RoomContract[]
+  kioskContracts   KioskContract[]
+  chargingSessions ChargingSession[]
+  serviceSubs      ServiceSubscription[]
+
+  @@index([tenantId, deletedAt])
+}
+
+model Customer {
+  id        String    @id @default(cuid())
+  tenantId  String
+  branchId  String
+  name      String
+  phone     String
+  cccd      String?
+  address   String?
+  note      String?   @db.Text
+  isDemo    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant           Tenant                @relation(fields: [tenantId], references: [id])
+  branch           Branch                @relation(fields: [branchId], references: [id])
+  vehicles         Vehicle[]
+  roomContracts    RoomContract[]
+  kioskContracts   KioskContract[]
+  serviceSubs      ServiceSubscription[]
+  chargingSessions ChargingSession[]
+  invoices         Invoice[]
+
+  @@index([tenantId, phone])
+  @@index([tenantId, deletedAt])
+}
+
+model Vehicle {
+  id           String      @id @default(cuid())
+  tenantId     String
+  branchId     String
+  customerId   String
+  plateNumber  String
+  plateSearch  String
+  vehicleType  VehicleType
+  imageUrl     String?
+  roomOrAddress String?
+  note         String?     @db.Text
+  isDemo       Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  branch    Branch            @relation(fields: [branchId], references: [id])
+  customer  Customer          @relation(fields: [customerId], references: [id])
+  contracts VehicleContract[]
+  sessions  ChargingSession[]
+
+  @@index([tenantId, plateNumber])
+  @@index([tenantId, plateSearch])
+  @@index([tenantId, deletedAt])
+}
+
+model VehicleContract {
+  id           String         @id @default(cuid())
+  tenantId     String
+  branchId     String
+  vehicleId    String
+  monthlyPrice Decimal        @db.Decimal(14, 0)
+  startDate    DateTime
+  cycle        BillingCycle   @default(THANG)
+  nextDueDate  DateTime
+  status       ContractStatus @default(DANG_GUI)
+  isDemo       Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  deletedAt    DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  branch   Branch    @relation(fields: [branchId], references: [id])
+  vehicle  Vehicle   @relation(fields: [vehicleId], references: [id])
+  invoices Invoice[]
+
+  @@index([tenantId, nextDueDate])
+  @@index([tenantId, status, deletedAt])
+}
+
+model Room {
+  id        String     @id @default(cuid())
+  tenantId  String
+  branchId  String
+  code      String
+  areaM2    Decimal?   @db.Decimal(10, 2)
+  monthlyPrice Decimal @db.Decimal(14, 0)
+  deposit   Decimal    @default(0) @db.Decimal(14, 0)
+  status    RoomStatus @default(TRONG)
+  note      String?    @db.Text
+  isDemo    Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  deletedAt DateTime?
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  branch    Branch         @relation(fields: [branchId], references: [id])
+  contracts RoomContract[]
+
+  @@index([tenantId, code])
+  @@index([tenantId, deletedAt])
+}
+
+model RoomContract {
+  id          String         @id @default(cuid())
+  tenantId    String
+  branchId    String
+  roomId      String
+  customerId  String
+  monthlyPrice Decimal       @db.Decimal(14, 0)
+  deposit     Decimal        @db.Decimal(14, 0)
+  startDate   DateTime
+  cycle       BillingCycle   @default(THANG)
+  nextDueDate DateTime
+  status      ContractStatus @default(DANG_GUI)
+  isDemo      Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id])
+  branch   Branch           @relation(fields: [branchId], references: [id])
+  room     Room             @relation(fields: [roomId], references: [id])
+  customer Customer         @relation(fields: [customerId], references: [id])
+  readings UtilityReading[]
+  invoices Invoice[]
+
+  @@index([tenantId, nextDueDate])
+}
+
+model UtilityReading {
+  id             String    @id @default(cuid())
+  tenantId       String
+  roomContractId String
+  periodYm       String
+  oldElectric    Decimal   @db.Decimal(12, 2)
+  newElectric    Decimal   @db.Decimal(12, 2)
+  oldWater       Decimal   @db.Decimal(12, 2)
+  newWater       Decimal   @db.Decimal(12, 2)
+  electricPrice  Decimal   @db.Decimal(14, 0)
+  waterPrice     Decimal   @db.Decimal(14, 0)
+  trashFee       Decimal   @default(0) @db.Decimal(14, 0)
+  otherFee       Decimal   @default(0) @db.Decimal(14, 0)
+  isDemo         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  roomContract RoomContract @relation(fields: [roomContractId], references: [id])
+  invoices     Invoice[]
+
+  @@index([tenantId, periodYm])
+}
+
+model Kiosk {
+  id           String    @id @default(cuid())
+  tenantId     String
+  branchId     String
+  code         String
+  location     String?
+  areaM2       Decimal?  @db.Decimal(10, 2)
+  monthlyPrice Decimal   @db.Decimal(14, 0)
+  isDemo       Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id])
+  branch    Branch          @relation(fields: [branchId], references: [id])
+  contracts KioskContract[]
+
+  @@index([tenantId, code])
+  @@index([tenantId, deletedAt])
+}
+
+model KioskContract {
+  id           String         @id @default(cuid())
+  tenantId     String
+  branchId     String
+  kioskId      String
+  customerId   String
+  businessType String?
+  monthlyPrice Decimal        @db.Decimal(14, 0)
+  deposit      Decimal        @default(0) @db.Decimal(14, 0)
+  startDate    DateTime
+  endDate      DateTime?
+  cycle        BillingCycle   @default(THANG)
+  nextDueDate  DateTime
+  status       ContractStatus @default(DANG_GUI)
+  isDemo       Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  deletedAt    DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  branch   Branch    @relation(fields: [branchId], references: [id])
+  kiosk    Kiosk     @relation(fields: [kioskId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id])
+  invoices Invoice[]
+
+  @@index([tenantId, nextDueDate])
+}
+
+model ServiceType {
+  id        String       @id @default(cuid())
+  tenantId  String
+  name      String
+  unitPrice Decimal      @db.Decimal(14, 0)
+  unit      String
+  cycle     ServiceCycle
+  isDemo    Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  tenant Tenant                @relation(fields: [tenantId], references: [id])
+  subs   ServiceSubscription[]
+
+  @@index([tenantId, deletedAt])
+}
+
+model ServiceSubscription {
+  id            String         @id @default(cuid())
+  tenantId      String
+  branchId      String
+  serviceTypeId String
+  customerId    String
+  price         Decimal        @db.Decimal(14, 0)
+  startDate     DateTime
+  nextDueDate   DateTime?
+  status        ContractStatus @default(DANG_GUI)
+  isDemo        Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime?
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  branch      Branch      @relation(fields: [branchId], references: [id])
+  serviceType ServiceType @relation(fields: [serviceTypeId], references: [id])
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  invoices    Invoice[]
+
+  @@index([tenantId, nextDueDate])
+}
+
+model Charger {
+  id        String        @id @default(cuid())
+  tenantId  String
+  branchId  String
+  code      String
+  location  String?
+  status    ChargerStatus @default(RANH)
+  isDemo    Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  deletedAt DateTime?
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  branch   Branch            @relation(fields: [branchId], references: [id])
+  sessions ChargingSession[]
+
+  @@index([tenantId, code])
+}
+
+model ChargingPlan {
+  id            String              @id @default(cuid())
+  tenantId      String
+  name          String
+  billingType   ChargingBillingType
+  unitPrice     Decimal             @db.Decimal(14, 0)
+  monthlyPrice  Decimal?            @db.Decimal(14, 0)
+  maxHours      Decimal?            @db.Decimal(6, 2)
+  isDemo        Boolean             @default(false)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  deletedAt     DateTime?
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  sessions ChargingSession[]
+
+  @@index([tenantId, deletedAt])
+}
+
+model ChargingSession {
+  id             String    @id @default(cuid())
+  tenantId       String
+  branchId       String
+  chargerId      String
+  customerId     String?
+  vehicleId      String?
+  chargingPlanId String?
+  startedAt      DateTime
+  endedAt        DateTime?
+  kwh            Decimal?  @db.Decimal(10, 3)
+  amount         Decimal?  @db.Decimal(14, 0)
+  safetyWarning  Boolean   @default(false)
+  isDemo         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  branch       Branch        @relation(fields: [branchId], references: [id])
+  charger      Charger       @relation(fields: [chargerId], references: [id])
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  vehicle      Vehicle?      @relation(fields: [vehicleId], references: [id])
+  chargingPlan ChargingPlan? @relation(fields: [chargingPlanId], references: [id])
+  invoices     Invoice[]
+
+  @@index([tenantId, startedAt])
+}
+
+model Invoice {
+  id                    String        @id @default(cuid())
+  tenantId              String
+  branchId              String
+  customerId            String
+  source                InvoiceSource
+  vehicleContractId     String?
+  roomContractId        String?
+  kioskContractId       String?
+  serviceSubscriptionId String?
+  chargingSessionId     String?
+  utilityReadingId      String?
+  periodStart           DateTime
+  periodEnd             DateTime
+  dueDate               DateTime
+  totalAmount           Decimal       @db.Decimal(14, 0)
+  paidAmount            Decimal       @default(0) @db.Decimal(14, 0)
+  status                InvoiceStatus @default(CHUA_THANH_TOAN)
+  note                  String?       @db.Text
+  receiptToken          String        @unique @default(cuid())
+  isDemo                Boolean       @default(false)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+
+  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+  branch              Branch               @relation(fields: [branchId], references: [id])
+  customer            Customer             @relation(fields: [customerId], references: [id])
+  vehicleContract     VehicleContract?     @relation(fields: [vehicleContractId], references: [id])
+  roomContract        RoomContract?        @relation(fields: [roomContractId], references: [id])
+  kioskContract       KioskContract?       @relation(fields: [kioskContractId], references: [id])
+  serviceSubscription ServiceSubscription? @relation(fields: [serviceSubscriptionId], references: [id])
+  chargingSession     ChargingSession?     @relation(fields: [chargingSessionId], references: [id])
+  utilityReading      UtilityReading?      @relation(fields: [utilityReadingId], references: [id])
+  items               InvoiceItem[]
+  transactions        Transaction[]
+
+  @@index([tenantId, dueDate])
+  @@index([tenantId, status, deletedAt])
+}
+
+model InvoiceItem {
+  id          String    @id @default(cuid())
+  tenantId    String
+  invoiceId   String
+  description String
+  amount      Decimal   @db.Decimal(14, 0)
+  isDemo      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([tenantId, invoiceId])
+}
+
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  tenantId  String
+  name      String
+  isDemo    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  transactions Transaction[]
+
+  @@index([tenantId, deletedAt])
+}
+
+model Transaction {
+  id                 String          @id @default(cuid())
+  tenantId           String
+  branchId           String
+  type               TransactionType
+  amount             Decimal         @db.Decimal(14, 0)
+  occurredAt         DateTime
+  method             PaymentMethod
+  invoiceId          String?
+  expenseCategoryId  String?
+  collectedByUserId  String
+  note               String?         @db.Text
+  imageUrl           String?
+  isDemo             Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  deletedAt          DateTime?
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  branch          Branch           @relation(fields: [branchId], references: [id])
+  invoice         Invoice?         @relation(fields: [invoiceId], references: [id])
+  expenseCategory ExpenseCategory? @relation(fields: [expenseCategoryId], references: [id])
+  collectedBy     User             @relation(fields: [collectedByUserId], references: [id])
+
+  @@index([tenantId, occurredAt])
+  @@index([tenantId, type, deletedAt])
+}
+
+model CashbookClosing {
+  id          String    @id @default(cuid())
+  tenantId    String
+  branchId    String
+  closedOn    DateTime
+  openingBalance Decimal @db.Decimal(14, 0)
+  totalIn     Decimal   @db.Decimal(14, 0)
+  totalOut    Decimal   @db.Decimal(14, 0)
+  closingBalance Decimal @db.Decimal(14, 0)
+  note        String?   @db.Text
+  isDemo      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId, branchId, closedOn])
+}
+
+model Reminder {
+  id         String    @id @default(cuid())
+  tenantId   String
+  targetType String
+  targetId   String
+  kind       String
+  remindAt   DateTime
+  sentAt     DateTime?
+  isDemo     Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, targetId, kind])
+}
+
+model NotificationLog {
+  id        String    @id @default(cuid())
+  tenantId  String
+  channel   String
+  toAddress String
+  subject   String?
+  body      String?   @db.Text
+  status    String
+  error     String?   @db.Text
+  isDemo    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  tenantId   String
+  userId     String?
+  action     String
+  entityType String
+  entityId   String
+  beforeJson Json?
+  afterJson  Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+}
+
+model PlateScanUsage {
+  id        String   @id @default(cuid())
+  tenantId  String
+  scanDate  String   // "YYYY-MM-DD"
+  scanMonth String   // "YYYY-MM"
+  count     Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, scanDate])
+  @@index([tenantId, scanMonth])
+}

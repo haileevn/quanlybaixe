@@ -53,23 +53,45 @@ Phản hồi DUY NHẤT một chuỗi JSON hợp lệ theo cấu trúc (không t
 hoặc nếu ảnh không có biển số xe nào:
 {"plateNumber": "", "confidence": 0, "found": false}`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: prompt },
-            {
-              inlineData: {
-                mimeType: "image/jpeg",
-                data: cleanBase64,
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: cleanBase64,
+                },
               },
-            },
-          ],
-        },
-      ],
-    });
+            ],
+          },
+        ],
+      });
+    } catch (modelErr) {
+      console.warn("[Gemini AI] gemini-2.0-flash failed, trying gemini-1.5-flash:", modelErr);
+      response = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: cleanBase64,
+                },
+              },
+            ],
+          },
+        ],
+      });
+    }
 
     const text = response.text?.trim() ?? "";
     // Lọc lấy JSON từ response

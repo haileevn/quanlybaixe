@@ -1,5 +1,5 @@
 import type { ANPRResult, ScanFrameOptions, ImageQualityMetrics } from "./types";
-import { assessImageQuality, cropAndPreprocessPlate } from "./preprocess";
+import { assessImageQuality } from "./preprocess";
 import { detectPlate } from "./detector";
 import { defaultOCRProvider } from "./localOCR";
 import { normalizeVietnamPlate, formatPlateDisplay, canonicalPlate } from "./normalize";
@@ -33,8 +33,8 @@ export async function scanPlate(
   // 1. ĐÁNH GIÁ CHẤT LƯỢNG ẢNH (BLUR & QUALITY ASSESSMENT)
   const quality = assessImageQuality(frameCanvas);
 
-  // Nếu ảnh bị quá mờ/rung và không ép buộc AI -> Bỏ qua, hiển thị "Giữ camera ổn định...", KHÔNG gọi AI
-  if (quality.isBlurry && !forceAi && mode !== "AI_ONLY") {
+  // Nếu ảnh bị quá mờ/rung trong vòng lặp quét tự động -> Bỏ qua chờ khung hình sau (trừ khi là lượt chụp thủ công attemptIndex >= maxAttempts)
+  if (quality.isBlurry && !forceAi && mode !== "AI_ONLY" && attemptIndex < maxAttempts) {
     const elapsed = Math.round(performance.now() - startTime);
     return {
       plate: "",
@@ -67,16 +67,13 @@ export async function scanPlate(
     confidence: 0.9,
   };
 
-  // 4. BƯỚC 2: CROP HIGH-RES & TIỀN XỬ LÝ CANVAS ĐA TẦNG
-  const cropVariants = cropAndPreprocessPlate(frameCanvas, primaryBox);
+  // 4. BƯỚC 2: LOCAL OCR PROVIDER (Đa biến thể Grayscale / Sharp / Adaptive / Full-Frame)
+  const ocrRes = await defaultOCRProvider.recognize(frameCanvas, primaryBox);
 
-  // 5. BƯỚC 3: LOCAL OCR PROVIDER (TESSERACT 3-PASS OFFLINE)
-  const ocrRes = await defaultOCRProvider.recognize(cropVariants.enhancedCrop);
-
-  // 6. BƯỚC 4: NORMALIZE & VALIDATE BIỂN SỐ VIỆT NAM
+  // 5. BƯỚC 3: NORMALIZE & VALIDATE BIỂN SỐ VIỆT NAM
   const norm = normalizeVietnamPlate(ocrRes.rawText);
 
-  // 7. BƯỚC 5: MULTI-FRAME VOTING & TÍNH ĐỘ TIN CẬY
+  // 6. BƯỚC 4: MULTI-FRAME VOTING & TÍNH ĐỘ TIN CẬY
   let consensusRatio = 1.0;
   if (norm.isValid) {
     const vote = globalVoting.push(norm.canonicalPlate, ocrRes.confidence / 100);

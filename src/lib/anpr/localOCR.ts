@@ -1,5 +1,5 @@
 import { createWorker, PSM, type Worker } from "tesseract.js";
-import type { OCRProvider, OCRResult } from "./types";
+import type { OCRProvider, OCRResult, DetectionBox } from "./types";
 import { cropAndPreprocessPlate } from "./preprocess";
 import { normalizeVietnamPlate } from "./normalize";
 
@@ -40,71 +40,95 @@ export class TesseractOCRProvider implements OCRProvider {
     }
   }
 
-  public async recognize(croppedCanvas: HTMLCanvasElement): Promise<OCRResult> {
+  public async recognize(
+    sourceCanvas: HTMLCanvasElement,
+    bbox?: DetectionBox
+  ): Promise<OCRResult> {
     const worker = await this.getWorker();
 
-    // Tạo các biến thể tiền xử lý chất lượng cao
-    const variants = cropAndPreprocessPlate(croppedCanvas, {
-      x: 0,
-      y: 0,
-      width: 1,
-      height: 1,
-      confidence: 1,
-    });
+    // 1. Tạo các biến thể tiền xử lý chất lượng cao từ bbox
+    const variants = cropAndPreprocessPlate(sourceCanvas, bbox);
 
-    // Pass 1: Adaptive Local Threshold (Bradley-Roth)
-    const res1 = await worker.recognize(variants.enhancedCrop);
-    const parsed1 = normalizeVietnamPlate(res1.data.text);
-
-    if (parsed1.isValid && parsed1.confidence >= 0.95) {
-      return {
-        rawText: res1.data.text,
-        confidence: Math.round(res1.data.confidence),
-        words: extractWords(res1.data),
-        processedCanvas: variants.enhancedCrop,
-      };
-    }
-
-    // Pass 2: High Contrast Sharpening
-    const res2 = await worker.recognize(variants.sharpCrop);
-    const parsed2 = normalizeVietnamPlate(res2.data.text);
-
-    if (parsed2.isValid && parsed2.confidence >= 0.95) {
-      return {
-        rawText: res2.data.text,
-        confidence: Math.round(res2.data.confidence),
-        words: extractWords(res2.data),
-        processedCanvas: variants.sharpCrop,
-      };
-    }
-
-    // Pass 3: Grayscale Normalized (Nền sáng / Màn hình điện thoại)
-    const res3 = await worker.recognize(variants.grayscaleCrop);
-    const parsed3 = normalizeVietnamPlate(res3.data.text);
-
-    if (parsed3.isValid) {
-      return {
-        rawText: res3.data.text,
-        confidence: Math.round(res3.data.confidence),
-        words: extractWords(res3.data),
-        processedCanvas: variants.grayscaleCrop,
-      };
-    }
-
-    // Chọn kết quả có độ tự tin cao nhất
     const passes = [
-      { res: res1, canvas: variants.enhancedCrop, p: parsed1 },
-      { res: res2, canvas: variants.sharpCrop, p: parsed2 },
-      { res: res3, canvas: variants.grayscaleCrop, p: parsed3 },
+      { canvas: variants.grayscaleCrop, name: "grayscale" },
+      { canvas: variants.sharpCrop, name: "sharp" },
+      { canvas: variants.enhancedCrop, name: "adaptive_threshold" },
+      { canvas: variants.originalCrop, name: "original" },
     ];
-    passes.sort((a, b) => b.res.data.confidence - a.res.data.confidence);
-    const best = passes[0];
+
+    const results: Array<{
+      rawText: string;
+      confidence: number;
+      words: Array<{ text: string; confidence: number }>;
+      processedCanvas: HTMLCanvasElement;
+      isValid: boolean;
+    }> = [];
+
+    for (const p of passes) {
+      try {
+        const res = await worker.recognize(p.canvas);
+        const parsed = normalizeVietnamPlate(res.data.text);
+        const entry = {
+          rawText: res.data.text,
+          confidence: Math.round(res.data.confidence),
+          words: extractWords(res.data),
+          processedCanvas: p.canvas,
+          isValid: parsed.isValid,
+        };
+
+        // Nếu đã trích xuất được biển số hợp lệ với độ tự tin tốt -> Dừng sớm và trả về kết quả
+        if (parsed.isValid && parsed.confidence >= 0.9) {
+          return entry;
+        }
+
+        results.push(entry);
+      } catch (err) {
+        console.warn(`[OCR Pass ${p.name} failed]:`, err);
+      }
+    }
+
+    // 2. Nếu bbox nhỏ chưa tìm thấy, thử quét trên toàn bộ khung hình Full Canvas (Grayscale)
+    if (bbox && (bbox.width < 0.95 || bbox.height < 0.95)) {
+      try {
+        const fullVariants = cropAndPreprocessPlate(sourceCanvas, {
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1,
+          confidence: 1,
+        });
+        const fullRes = await worker.recognize(fullVariants.sharpCrop);
+        const fullParsed = normalizeVietnamPlate(fullRes.data.text);
+        if (fullParsed.isValid) {
+          return {
+            rawText: fullRes.data.text,
+            confidence: Math.round(fullRes.data.confidence),
+            words: extractWords(fullRes.data),
+            processedCanvas: fullVariants.sharpCrop,
+          };
+        }
+      } catch {
+        // ignore full scan error
+      }
+    }
+
+    // 3. Trả về kết quả tốt nhất tìm được
+    const validMatches = results.filter((r) => r.isValid);
+    if (validMatches.length > 0) {
+      validMatches.sort((a, b) => b.confidence - a.confidence);
+      return validMatches[0];
+    }
+
+    if (results.length > 0) {
+      results.sort((a, b) => b.confidence - a.confidence);
+      return results[0];
+    }
 
     return {
-      rawText: best.res.data.text,
-      confidence: Math.round(best.res.data.confidence),
-      words: extractWords(best.res.data),
-      processedCanvas: best.canvas,
+      rawText: "",
+      confidence: 0,
+      words: [],
+      processedCanvas: sourceCanvas,
     };
   }
 

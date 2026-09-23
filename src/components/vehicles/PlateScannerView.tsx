@@ -15,6 +15,7 @@ import {
   Activity,
   ShieldCheck,
   Cpu,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -737,17 +738,33 @@ export function PlateScannerView() {
             </div>
 
             <div className="flex gap-2">
-              <input
-                className={`${touchInputClass} uppercase font-black text-lg tracking-wider text-[#0F4C5C]`}
-                placeholder="VD: 51H-919.91 hoặc 59H1-123.45"
-                value={recognizedPlate}
-                onChange={(e) => setRecognizedPlate(e.target.value.toUpperCase())}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && recognizedPlate.trim()) {
-                    void executeLookup(recognizedPlate);
-                  }
-                }}
-              />
+              <div className="relative flex-1">
+                <input
+                  className={`${touchInputClass} uppercase font-black text-lg tracking-wider text-[#0F4C5C] pr-10`}
+                  placeholder="VD: 51H-919.91 hoặc 59H1-123.45"
+                  value={recognizedPlate}
+                  onChange={(e) => setRecognizedPlate(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && recognizedPlate.trim()) {
+                      void executeLookup(recognizedPlate);
+                    }
+                  }}
+                />
+                {recognizedPlate ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecognizedPlate("");
+                      setCapturedImageUrl(null);
+                      setServerImageUrl(null);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
+                    title="Xóa biển số & ảnh cũ"
+                  >
+                    <X className="size-4" />
+                  </button>
+                ) : null}
+              </div>
               <button
                 type="button"
                 disabled={isSearching || !recognizedPlate.trim()}
